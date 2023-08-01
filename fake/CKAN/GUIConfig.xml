@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Configuration xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <CommandLineArguments>KSP_x64.exe -single-instance</CommandLineArguments>
+  <AutoCloseWaitDialog>false</AutoCloseWaitDialog>
+  <URLHandlerNoNag>true</URLHandlerNoNag>
+  <CheckForUpdatesOnLaunch>false</CheckForUpdatesOnLaunch>
+  <CheckForUpdatesOnLaunchNoNag>true</CheckForUpdatesOnLaunchNoNag>
+  <EnableTrayIcon>false</EnableTrayIcon>
+  <MinimizeToTray>false</MinimizeToTray>
+  <HideEpochs>true</HideEpochs>
+  <HideV>false</HideV>
+  <RefreshOnStartup>false</RefreshOnStartup>
+  <RefreshOnStartupNoNag>true</RefreshOnStartupNoNag>
+  <RefreshPaused>false</RefreshPaused>
+  <AutoSortByUpdate>true</AutoSortByUpdate>
+  <ActiveFilter>6</ActiveFilter>
+  <DefaultSearches>
+    <Search>is:installed</Search>
+  </DefaultSearches>
+  <SortColumns />
+  <MultiSortDescending />
+  <HiddenColumnNames />
+  <IsWindowMaximised>false</IsWindowMaximised>
+  <WindowSize>
+    <Width>1024</Width>
+    <Height>500</Height>
+  </WindowSize>
+  <PanelPosition>636</PanelPosition>
+  <WindowLoc>
+    <X>276</X>
+    <Y>253</Y>
+  </WindowLoc>
+</Configuration>

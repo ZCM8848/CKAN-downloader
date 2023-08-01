@@ -1,0 +1,43 @@
+{
+    "spec_version": "v1.18",
+    "identifier": "installed----",
+    "name": "installed-可移动",
+    "abstract": "已安装在 KSP 实例 可移动 的模组列表",
+    "author": [
+        "Z___C"
+    ],
+    "version": "2023.07.31.12.59.10",
+    "ksp_version_min": "1.12.3",
+    "ksp_version_max": "1.12.3",
+    "license": [
+        "unknown"
+    ],
+    "depends": [
+        {
+            "name": "4kSPExpanded",
+            "version": "0.2.1.7"
+        },
+        {
+            "name": "ClickThroughBlocker",
+            "version": "1:2.1.10.21"
+        },
+        {
+            "name": "kRPC",
+            "version": "v0.5.2"
+        },
+        {
+            "name": "ModuleManager",
+            "version": "4.2.3"
+        },
+        {
+            "name": "Toolbar",
+            "version": "1:1.8.1.1"
+        },
+        {
+            "name": "ToolbarController",
+            "version": "1:0.1.9.11"
+        }
+    ],
+    "release_date": "2023-07-31T20:59:10.4509423+08:00",
+    "kind": "metapackage"
+}

@@ -1,0 +1,27 @@
+{
+    "spec_version": "v1.18",
+    "identifier": "installed----",
+    "name": "installed-可移动",
+    "abstract": "已安装在 KSP 实例 可移动 的模组列表",
+    "author": [
+        "Z___C"
+    ],
+    "version": "2023.07.31.12.50.45",
+    "ksp_version_min": "1.12.3",
+    "ksp_version_max": "1.12.3",
+    "license": [
+        "unknown"
+    ],
+    "depends": [
+        {
+            "name": "kRPC",
+            "version": "v0.5.2"
+        },
+        {
+            "name": "ModuleManager",
+            "version": "4.2.3"
+        }
+    ],
+    "release_date": "2023-07-31T20:50:45.6210759+08:00",
+    "kind": "metapackage"
+}
