@@ -125,7 +125,7 @@ def parse(file_name):
     except:
         return None, None, None
 
-def check(to_download):
+def check(downloaded, to_download):
         l = []
         size_sum = 0
         for mod in to_download:
@@ -133,8 +133,9 @@ def check(to_download):
                 a, b, c, d = parse(mod)
                 if a and b and c:
                     print(f'checked: {mod}')
-                    l.append(mod)
-                    size_sum = size_sum + (c/1024/1024/1024)
+                    if mod not in downloaded:
+                        l.append(mod)
+                        size_sum = size_sum + (c/1024/1024/1024)
             except:
                 pass
         return l, size_sum
@@ -163,12 +164,17 @@ def ckan_install():
 
 def main():
     failed = []
+    with open('downloaded.log','r') as log:
+        downloaded = log.readlines()
     refresh_source()
     print("""To update the source, please visit "https://github.com/KSP-CKAN/CKAN-meta/archive/refs/heads/master.zip" """)
-    to_download, size = check(get_task(f'{os.getcwd()}//CKAN-meta-master//'))
+    to_download, size = check(downloaded,get_task(f'{os.getcwd()}//CKAN-meta-master//'))
     print(f'The following mods are going to be downloaded:')
     for mod in to_download:
-        print(f'    {mod}')
+        if mod+'\n' in downloaded:
+            to_download.remove(mod)
+        else:
+            print(f'    {mod}')
     os.system('cls')
     print(f'{len(to_download)} mods, {round(size,2)}GB in all')
     for mod in to_download:
@@ -176,6 +182,8 @@ def main():
             print(f'parsing {mod}')
             link, name, size, version = parse(mod)
             download(link, name + version + '.zip')
+            with open('downloaded.log','a+') as log:
+                log.write(f'{mod}\n')
         except:
             failed.append(mod)
     ckan_install()
