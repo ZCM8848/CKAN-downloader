@@ -80,13 +80,15 @@ class CKANDownloader:
                     'unit_scale': True,
                     'unit_divisor': 1024,
                     'desc': desc or "Downloading",
-                    'leave': False
+                    'leave': False,
+                    'ncols': 80
                 } if total_size > 0 else {
                     'total': None,
                     'unit': 'B',
                     'unit_scale': True,
                     'desc': desc or "Downloading",
-                    'leave': False
+                    'leave': False,
+                    'ncols': 80
                 }
                 
                 with open(path, 'wb') as f:
@@ -97,9 +99,11 @@ class CKANDownloader:
                                 if total_size > 0:
                                     pbar.update(len(chunk))
                 
+                print()  # 确保后续输出在新行
                 return path
                 
             except (requests.RequestException, IOError) as e:
+                print()  # 确保错误信息在新行显示
                 if attempt < self.max_retry - 1:
                     self.logger.warning(f"failed to download from {url} (attempt {attempt + 1}/{self.max_retry}): {e}")
                     time.sleep(1)
