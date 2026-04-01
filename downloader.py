@@ -115,8 +115,16 @@ class CKANDownloader:
                     return None
         return None
     
-    def download_metadata(self) -> Path | None:
-        """下载并解压CKAN元数据"""
+    def download_metadata(self, incremental: bool = True) -> Path | None:
+        """
+        下载并解压CKAN元数据
+        
+        Args:
+            incremental: 是否使用增量模式（保留已有metadata，只更新变更）
+            
+        Returns:
+            解压后的元数据目录路径，失败返回None
+        """
         tar_path = self.metadata_path / "master.tar.gz"
         extract_path = self.metadata_path / "CKAN-meta-master"
         
@@ -125,8 +133,8 @@ class CKANDownloader:
             self.logger.info(f"removing old archive: {tar_path}")
             tar_path.unlink()
         
-        # 删除旧的解压目录
-        if extract_path.exists():
+        # 非增量模式：删除旧的解压目录
+        if not incremental and extract_path.exists():
             self.logger.info(f"removing old metadata directory: {extract_path}")
             shutil.rmtree(extract_path)
         
@@ -137,12 +145,14 @@ class CKANDownloader:
             self.logger.error("failed to download metadata archive")
             return None
         
-        # 解压
+        # 解压（增量模式下会直接覆盖已有文件）
         self.logger.info(f"extracting metadata to {self.metadata_path}")
         try:
             with tarfile.open(downloaded, "r:gz") as tar:
                 tar.extractall(self.metadata_path)
             self.logger.info("metadata extraction complete")
+            # 删除tar.gz文件节省空间
+            tar_path.unlink()
             return extract_path
         except Exception as e:
             self.logger.error(f"failed to extract metadata: {e}")
@@ -171,12 +181,83 @@ class CKANDownloader:
             return [url for url in download_field if isinstance(url, str)]
         return []
     
-    def scan_ckan_files(self, meta_dir: Path) -> list[dict]:
-        """扫描所有.ckan和.kerbalstuff文件，返回下载任务列表"""
+    @staticmethod
+    def _calculate_file_hash(path: Path, algorithm: str = "sha256") -> str | None:
+        """
+        计算文件的hash值
+        
+        Args:
+            path: 文件路径
+            algorithm: hash算法 (sha256, sha1, md5等)
+            
+        Returns:
+            hash字符串，失败返回None
+        """
+        try:
+            hash_obj = hashlib.new(algorithm)
+            with open(path, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    hash_obj.update(chunk)
+            return hash_obj.hexdigest().lower()
+        except Exception:
+            return None
+    
+    def _verify_file_hash(self, file_path: Path, ckan_data: dict) -> tuple[bool, str]:
+        """
+        验证文件的hash是否与元数据匹配
+        
+        Args:
+            file_path: 本地文件路径
+            ckan_data: CKAN元数据
+            
+        Returns:
+            (是否有效, 状态信息)
+            状态信息: "valid"(有效), "invalid_hash"(hash不匹配), "no_hash"(元数据无hash), "error"(计算错误)
+        """
+        download_hash = ckan_data.get("download_hash", {})
+        
+        # 优先使用sha256，其次sha1
+        if "sha256" in download_hash:
+            expected_hash = download_hash["sha256"].lower()
+            actual_hash = self._calculate_file_hash(file_path, "sha256")
+            if actual_hash is None:
+                return False, "error"
+            if actual_hash != expected_hash:
+                self.logger.warning(f"hash mismatch for {file_path.name}: expected {expected_hash}, got {actual_hash}")
+                return False, "invalid_hash"
+            return True, "valid"
+        
+        elif "sha1" in download_hash:
+            expected_hash = download_hash["sha1"].lower()
+            actual_hash = self._calculate_file_hash(file_path, "sha1")
+            if actual_hash is None:
+                return False, "error"
+            if actual_hash != expected_hash:
+                self.logger.warning(f"hash mismatch for {file_path.name}: expected {expected_hash}, got {actual_hash}")
+                return False, "invalid_hash"
+            return True, "valid"
+        
+        # 元数据中没有hash信息，跳过校验
+        return True, "no_hash"
+    
+    def scan_ckan_files(self, meta_dir: Path) -> tuple[list[dict], dict]:
+        """
+        扫描所有.ckan和.kerbalstuff文件，返回下载任务列表
+        
+        Returns:
+            (待下载任务列表, 统计信息字典)
+        """
         ckan_files = list(meta_dir.rglob("*.ckan")) + list(meta_dir.rglob("*.kerbalstuff"))
         self.logger.info(f"found {len(ckan_files)} metadata files")
         
         tasks = []
+        stats = {
+            "total": 0,
+            "already_cached": 0,
+            "corrupted": 0,
+            "new": 0
+        }
+        
         for ckan_file in ckan_files:
             try:
                 with open(ckan_file, 'r', encoding='utf-8') as f:
@@ -196,14 +277,27 @@ class CKANDownloader:
                     self.logger.warning(f"skipping {ckan_file}: invalid download field")
                     continue
                 
+                stats["total"] += 1
+                
                 # 使用第一个URL作为主URL（CKAN通常如此）
                 primary_url = download_urls[0]
                 cache_filename = self._build_cache_filename(primary_url, identifier, version)
                 cache_file_path = self.cache_path / cache_filename
                 
-                # 如果文件已存在，跳过
+                # 如果文件已存在，校验hash
                 if cache_file_path.exists():
-                    continue
+                    is_valid, status = self._verify_file_hash(cache_file_path, data)
+                    if is_valid:
+                        stats["already_cached"] += 1
+                        continue
+                    else:
+                        # hash不匹配或出错，需要重新下载
+                        stats["corrupted"] += 1
+                        self.logger.info(f"file corrupted, will re-download: {cache_filename}")
+                        # 删除损坏的文件
+                        cache_file_path.unlink()
+                else:
+                    stats["new"] += 1
                 
                 # 获取文件大小信息
                 download_size = data.get("download_size", 0)
@@ -224,7 +318,8 @@ class CKANDownloader:
                 self.logger.warning(f"failed to parse {ckan_file}: {e}")
                 continue
         
-        return tasks
+        self.logger.info(f"scan complete: {stats['already_cached']} cached, {stats['corrupted']} corrupted, {stats['new']} new")
+        return tasks, stats
     
     def estimate_total_size(self, tasks: list[dict] | None = None) -> dict:
         """
@@ -241,7 +336,7 @@ class CKANDownloader:
             if not meta_dir.exists():
                 self.logger.error("metadata not found, please run download_metadata() first")
                 return {"download_size": 0, "install_size": 0, "count": 0}
-            tasks = self.scan_ckan_files(meta_dir)
+            tasks, _ = self.scan_ckan_files(meta_dir)
         
         total_download = sum(task.get("download_size", 0) for task in tasks)
         total_install = sum(task.get("install_size", 0) for task in tasks)
@@ -256,12 +351,13 @@ class CKANDownloader:
         
         return result
     
-    def print_size_estimate(self, tasks: list[dict] | None = None) -> dict:
+    def print_size_estimate(self, tasks: list[dict] | None = None, stats: dict | None = None) -> dict:
         """
         打印空间估算信息
         
         Args:
             tasks: 下载任务列表，如果为None则自动扫描
+            stats: 扫描统计信息
             
         Returns:
             大小估算结果字典
@@ -269,7 +365,11 @@ class CKANDownloader:
         result = self.estimate_total_size(tasks)
         
         print("\n=== Space Estimate ===")
-        print(f"  Total files: {result['count']}")
+        print(f"  Total files in metadata: {result['count']}")
+        if stats:
+            print(f"  Already cached (valid): {stats.get('already_cached', 0)}")
+            print(f"  Corrupted (will re-download): {stats.get('corrupted', 0)}")
+            print(f"  New files: {stats.get('new', 0)}")
         print(f"  Download size: {self._format_size(result['download_size'])}")
         print(f"  Install size: {self._format_size(result['install_size'])}")
         if result['unknown_count'] > 0:
@@ -292,7 +392,7 @@ class CKANDownloader:
             if not meta_dir.exists():
                 self.logger.error("metadata not found, please run download_metadata() first")
                 return []
-            tasks = self.scan_ckan_files(meta_dir)
+            tasks, _ = self.scan_ckan_files(meta_dir)
         
         if not tasks:
             print("\nNo pending downloads found.")
@@ -329,7 +429,7 @@ class CKANDownloader:
             if not meta_dir.exists():
                 self.logger.error("metadata not found, please run download_metadata() first")
                 return 0, 0
-            tasks = self.scan_ckan_files(meta_dir)
+            tasks, _ = self.scan_ckan_files(meta_dir)
         
         if not tasks:
             self.logger.info("no mods to download")
@@ -372,12 +472,12 @@ class CKANDownloader:
         if not meta_dir:
             return 0, 0
         
-        # 2. 扫描.ckan文件
-        tasks = self.scan_ckan_files(meta_dir)
+        # 2. 扫描.ckan文件，获取下载任务和统计信息
+        tasks, stats = self.scan_ckan_files(meta_dir)
         self.to_download = tasks
         
         # 3. 显示空间估算
-        self.print_size_estimate(tasks)
+        self.print_size_estimate(tasks, stats)
         
         # 4. 显示待下载列表
         self.list_pending_downloads(tasks)
